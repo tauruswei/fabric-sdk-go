@@ -87,3 +87,7 @@ func GetSHAOpts() core.HashOpts {
 func GetECDSAP256KeyGenOpts(ephemeral bool) core.KeyGenOpts {
 	return &bccsp.ECDSAP256KeyGenOpts{Temporary: ephemeral}
 }
+
+func GetECDSAPrivateKeyImportOpts(ephemeral bool) core.KeyImportOpts {
+	return &bccsp.ECDSAPrivateKeyImportOpts{Temporary: ephemeral}
+}
