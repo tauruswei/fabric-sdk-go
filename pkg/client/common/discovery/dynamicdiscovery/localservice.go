@@ -84,13 +84,12 @@ func (s *LocalService) doQueryPeers() ([]fab.Peer, error) {
 	if len(responses) == 0 {
 		return nil, errors.Wrap(err, "expecting 1 response from discover service send but got none")
 	}
-
 	response := responses[0]
 	endpoints, err := response.ForLocal().Peers()
 	if err != nil {
 		return nil, DiscoveryError(err)
 	}
-
+	logger.Infof("get responses[0]. peers: %+v", endpoints)
 	return s.filterLocalMSP(asPeers(ctx, endpoints)), nil
 }
 

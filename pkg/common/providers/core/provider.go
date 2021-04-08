@@ -17,6 +17,9 @@ type CryptoSuiteConfig interface {
 	SecurityProviderPin() string
 	SecurityProviderLabel() string
 	KeyStorePath() string
+	NetSignIP() string
+	NetSignPort() string
+	NetSignPassword() string
 }
 
 // Providers represents the SDK configured core providers context.

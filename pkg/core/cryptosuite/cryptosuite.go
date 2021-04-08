@@ -77,6 +77,7 @@ func DefaultInitialized() bool {
 func GetSHA256Opts() core.HashOpts {
 	return &bccsp.SHA256Opts{}
 }
+
 //GetGMSM3Opts returns options relating to SHA-256.
 func GetGMSM3Opts() core.HashOpts {
 	return &bccsp.GMSM3Opts{}
@@ -95,4 +96,9 @@ func GetECDSAP256KeyGenOpts(ephemeral bool) core.KeyGenOpts {
 // GetECDSAPrivateKeyImportOpts returns options for ECDSA key import.
 func GetECDSAPrivateKeyImportOpts(ephemeral bool) core.KeyImportOpts {
 	return &bccsp.ECDSAPrivateKeyImportOpts{Temporary: ephemeral}
+}
+
+// GetGMSM2PrivateKeyImportOpts returns options for ECDSA key import.
+func GetGMSM2PrivateKeyImportOpts(ephemeral bool) core.KeyImportOpts {
+	return &bccsp.GMSM2PrivateKeyImportOpts{Temporary: ephemeral}
 }

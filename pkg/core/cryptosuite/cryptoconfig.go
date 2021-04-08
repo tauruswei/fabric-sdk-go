@@ -110,6 +110,21 @@ func (c *Config) SecurityProviderLabel() string {
 	return c.backend.GetString("client.BCCSP.security.label")
 }
 
+// NetSignIP returns the netsign ip
+func (c *Config) NetSignIP() string {
+	return c.backend.GetString("client.BCCSP.NetSign.IP")
+}
+
+// NetSignPort returns the netsign port
+func (c *Config) NetSignPort() string {
+	return c.backend.GetString("client.BCCSP.NetSign.Port")
+}
+
+// NetSignPassword returns the netsign password
+func (c *Config) NetSignPassword() string {
+	return c.backend.GetString("client.BCCSP.NetSign.Password")
+}
+
 // KeyStorePath returns the keystore path used by BCCSP
 func (c *Config) KeyStorePath() string {
 	keystorePath := pathvar.Subst(c.backend.GetString("client.credentialStore.cryptoStore.path"))

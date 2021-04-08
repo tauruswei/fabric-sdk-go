@@ -69,7 +69,7 @@ func (c *Client) Send(ctx context.Context, req *discclient.Request, targets ...f
 
 	var responses []Response
 	var errs error
-
+	logger.Debug("... targets: %+v", targets)
 	for _, t := range targets {
 		go func(target fab.PeerConfig) {
 			defer wg.Done()
@@ -81,7 +81,7 @@ func (c *Client) Send(ctx context.Context, req *discclient.Request, targets ...f
 				logger.Debugf("... got discovery error response from [%s]: %s", target.URL, err)
 			} else {
 				responses = append(responses, &response{Response: resp, target: target.URL})
-				logger.Debugf("... got discovery response from [%s]", target.URL)
+				logger.Debugf("... got discovery response from [%s] %+v", target.URL, resp)
 			}
 			lock.Unlock()
 		}(t)

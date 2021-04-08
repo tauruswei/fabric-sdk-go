@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-
 const (
 	// CNCC_GM BasedFactoryName is the name of the factory of the hsm-based BCCSP implementation
 	CNCC_GMBasedFactoryName = "CNCC_GM"
@@ -27,7 +26,7 @@ func (f *CNCC_GMFactory) Get(gmOpts *cncc.CNCC_GMOpts) (bccsp.BCCSP, error) {
 	if gmOpts == nil {
 		return nil, errors.New("Invalid config. It must not be nil.")
 	}
-	
+
 	var ks bccsp.KeyStore
 	switch {
 	case gmOpts.Ephemeral:
@@ -42,7 +41,6 @@ func (f *CNCC_GMFactory) Get(gmOpts *cncc.CNCC_GMOpts) (bccsp.BCCSP, error) {
 		// Default to ephemeral key store
 		ks = cncc.NewDummyKeyStore()
 	}
-	
+
 	return cncc.New(*gmOpts, ks)
 }
-

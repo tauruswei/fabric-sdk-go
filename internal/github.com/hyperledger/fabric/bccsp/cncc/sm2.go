@@ -1,6 +1,5 @@
 package cncc
 
-
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -8,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	
+
 	"github.com/tjfoc/gmsm/sm2"
 )
 
@@ -53,7 +52,7 @@ func UnmarshalSM2Signature(raw []byte) (*big.Int, *big.Int, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("Failed unmashalling signature [%s]", err)
 	}
-	
+
 	// Validate sig
 	if sig.R == nil {
 		return nil, nil, errors.New("Invalid signature. R must be different from nil.")
@@ -61,32 +60,31 @@ func UnmarshalSM2Signature(raw []byte) (*big.Int, *big.Int, error) {
 	if sig.S == nil {
 		return nil, nil, errors.New("Invalid signature. S must be different from nil.")
 	}
-	
+
 	if sig.R.Sign() != 1 {
 		return nil, nil, errors.New("Invalid signature. R must be larger than zero")
 	}
 	if sig.S.Sign() != 1 {
 		return nil, nil, errors.New("Invalid signature. S must be larger than zero")
 	}
-	
+
 	return sig.R, sig.S, nil
 }
-
 
 func ToLowS(k *ecdsa.PublicKey, s *big.Int) (*big.Int, bool, error) {
 	lowS, err := IsLowS(k, s)
 	if err != nil {
 		return nil, false, err
 	}
-	
+
 	if !lowS && k.Curve != sm2.P256Sm2() {
 		// Set s to N - s that will be then in the lower part of signature space
 		// less or equal to half order
 		s.Sub(k.Params().N, s)
-		
+
 		return s, true, nil
 	}
-	
+
 	return s, false, nil
 }
 
@@ -96,7 +94,7 @@ func IsLowS(k *ecdsa.PublicKey, s *big.Int) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("Curve not recognized [%s]", k.Curve)
 	}
-	
+
 	return s.Cmp(halfOrder) != 1, nil
-	
+
 }

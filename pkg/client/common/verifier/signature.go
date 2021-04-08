@@ -78,6 +78,7 @@ func ValidateCertificateDates(cert *sm2.Certificate) error {
 	}
 	return nil
 }
+
 //ValidateCertificateDates used to verify if certificate was expired or not valid until later date
 func ValidateTLSCertificateDates(cert *x509.Certificate) error {
 	if cert == nil {
@@ -86,7 +87,7 @@ func ValidateTLSCertificateDates(cert *x509.Certificate) error {
 	if time.Now().UTC().Before(cert.NotBefore) {
 		return errors.New("Certificate provided is not valid until later date")
 	}
-	
+
 	if time.Now().UTC().After(cert.NotAfter) {
 		return errors.New("Certificate provided has expired")
 	}
@@ -121,6 +122,7 @@ func VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*sm2.Certificat
 	}
 	return nil
 }
+
 //VerifyPeerCertificate verifies raw certs and chain certs for expiry and not yet valid dates
 func VerifyTLSPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	for _, chaincert := range rawCerts {

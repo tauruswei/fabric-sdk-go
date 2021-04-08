@@ -109,14 +109,20 @@ func (s *ChannelService) evaluate(ctx contextAPI.Client, responses []fabdiscover
 	// For now just pick the first successful response
 
 	var lastErr error
-	for _, response := range responses {
+	var allEndpoints []*discclient.Peer
+	for i, response := range responses {
 		endpoints, err := response.ForChannel(s.channelID).Peers()
 		if err != nil {
 			lastErr = DiscoveryError(err)
 			logger.Warnf("error getting peers from discovery response: %s", lastErr)
 			continue
 		}
-		return s.asPeers(ctx, endpoints), nil
+		allEndpoints = append(allEndpoints, endpoints...)
+		logger.Infof("get responses[%d]. peers: %+v", i, endpoints)
+		// return s.asPeers(ctx, endpoints), nil
+	}
+	if len(allEndpoints) > 0 {
+		return s.asPeers(ctx, allEndpoints), nil
 	}
 	return nil, lastErr
 }

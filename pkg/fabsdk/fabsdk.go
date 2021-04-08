@@ -105,8 +105,8 @@ func fromPkgSuite(configProvider core.ConfigProvider, pkgSuite pkgSuite, opts ..
 	sdk := FabricSDK{
 		opts: options{
 			Core:    coreProv,
-			Service: svc,
 			MSP:     mspProv,
+			Service: svc,
 			Logger:  lg,
 		},
 	}

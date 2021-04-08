@@ -36,7 +36,7 @@ type Provider struct {
 
 //GetLogger returns SDK logger implementation
 func (p *Provider) GetLogger(module string) api.Logger {
-	newDefLogger := log.New(os.Stdout, fmt.Sprintf(logPrefixFormatter, module), log.Ldate|log.Ltime|log.LUTC)
+	newDefLogger := log.New(os.Stdout, fmt.Sprintf(logPrefixFormatter, module), log.Ldate|log.Ltime)
 	return &Log{deflogger: newDefLogger, module: module}
 }
 
@@ -70,7 +70,7 @@ type loggerOpts struct {
 }
 
 const (
-	logLevelFormatter   = "UTC %s-> %4.4s "
+	logLevelFormatter   = " CST %s-> %4.4s "
 	logPrefixFormatter  = " [%s] "
 	callerInfoFormatter = "- %s "
 )

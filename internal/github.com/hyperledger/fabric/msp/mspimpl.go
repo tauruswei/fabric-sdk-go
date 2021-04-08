@@ -19,9 +19,12 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/cncc"
+	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/sw"
 	factory "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/cryptosuitebridge"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm2"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
+	"github.com/hyperledger/fabric-sdk-go/pkg/core/cryptosuite/bccsp/wrapper"
 	m "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/msp"
 	"github.com/pkg/errors"
 )
@@ -154,20 +157,20 @@ func (msp *bccspmsp) getTLSCertFromPem(idBytes []byte) (*x509.Certificate, error
 	if idBytes == nil {
 		return nil, errors.New("getCertFromPem error: nil idBytes")
 	}
-	
+
 	// Decode the pem bytes
 	pemCert, _ := pem.Decode(idBytes)
 	if pemCert == nil {
 		return nil, errors.Errorf("getCertFromPem error: could not decode pem bytes [%v]", idBytes)
 	}
-	
+
 	// get a cert
 	var cert *x509.Certificate
 	cert, err := x509.ParseCertificate(pemCert.Bytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "getCertFromPem error: failed to parse x509 cert")
 	}
-	
+
 	return cert, nil
 }
 
@@ -380,22 +383,46 @@ func (msp *bccspmsp) deserializeIdentityInternal(serializedIdentity []byte) (Ide
 	if bl == nil {
 		return nil, errors.New("could not decode the PEM structure")
 	}
-	cert, err := sm2.ParseCertificate(bl.Bytes)
-	if err != nil {
-		return nil, errors.Wrap(err, "parseCertificate failed")
+	var pub core.Key
+	var cert *sm2.Certificate
+	switch msp.bccsp.(*wrapper.CryptoSuite).BCCSP.(type) {
+	case *cncc.Impl:
+		oricert, err := sm2.ParseCertificate(bl.Bytes)
+		if err != nil {
+			return nil, errors.Wrap(err, "parseCertificate failed")
+		}
+		pub, err = msp.bccsp.KeyImport(oricert, factory.GetX509PublicKeyImportOpts(true))
+		if err != nil {
+			return nil, errors.WithMessage(err, "failed to import certificate's public key")
+		}
+		cert = oricert
+	case *sw.CSP:
+		oricert, err := x509.ParseCertificate(bl.Bytes)
+		if err != nil {
+			return nil, errors.Wrap(err, "parseCertificate failed")
+		}
+		pub, err = msp.bccsp.KeyImport(oricert, factory.GetX509PublicKeyImportOpts(true))
+		if err != nil {
+			return nil, errors.WithMessage(err, "failed to import certificate's public key")
+		}
+		cert = ParseX509Certificate2Sm2(oricert)
 	}
+	// cert, err := sm2.ParseCertificate(bl.Bytes)
+	// if err != nil {
+	// 	return nil, errors.Wrap(err, "parseCertificate failed")
+	// }
 
-	// Now we have the certificate; make sure that its fields
-	// (e.g. the Issuer.OU or the Subject.OU) match with the
-	// MSP id that this MSP has; otherwise it might be an attack
-	// TODO!
-	// We can't do it yet because there is no standardized way
-	// (yet) to encode the MSP ID into the x.509 body of a cert
+	// // Now we have the certificate; make sure that its fields
+	// // (e.g. the Issuer.OU or the Subject.OU) match with the
+	// // MSP id that this MSP has; otherwise it might be an attack
+	// // TODO!
+	// // We can't do it yet because there is no standardized way
+	// // (yet) to encode the MSP ID into the x.509 body of a cert
 
-	pub, err := msp.bccsp.KeyImport(cert, factory.GetX509PublicKeyImportOpts(true))
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed to import certificate's public key")
-	}
+	// pub, err := msp.bccsp.KeyImport(cert, factory.GetX509PublicKeyImportOpts(true))
+	// if err != nil {
+	// 	return nil, errors.WithMessage(err, "failed to import certificate's public key")
+	// }
 
 	return newIdentity(cert, pub, msp)
 }
@@ -649,14 +676,14 @@ func (msp *bccspmsp) getTLSUniqueValidationChain(cert *x509.Certificate, opts x5
 	if err != nil {
 		return nil, errors.WithMessage(err, "the supplied identity is not valid")
 	}
-	
+
 	// we only support a single validation chain;
 	// if there's more than one then there might
 	// be unclarity about who owns the identity
 	if len(validationChains) != 1 {
 		return nil, errors.Errorf("this MSP only supports a single validation chain, got %d", len(validationChains))
 	}
-	
+
 	return validationChains[0], nil
 }
 
@@ -762,4 +789,73 @@ func (msp *bccspmsp) IsWellFormed(identity *m.SerializedIdentity) error {
 	}
 	_, err := x509.ParseCertificate(bl.Bytes)
 	return err
+}
+
+// X509证书格式转换为 SM2证书格式
+func ParseX509Certificate2Sm2(x509Cert *x509.Certificate) *sm2.Certificate {
+	sm2cert := &sm2.Certificate{
+		Raw:                     x509Cert.Raw,
+		RawTBSCertificate:       x509Cert.RawTBSCertificate,
+		RawSubjectPublicKeyInfo: x509Cert.RawSubjectPublicKeyInfo,
+		RawSubject:              x509Cert.RawSubject,
+		RawIssuer:               x509Cert.RawIssuer,
+
+		Signature:          x509Cert.Signature,
+		SignatureAlgorithm: sm2.SignatureAlgorithm(x509Cert.SignatureAlgorithm),
+
+		PublicKeyAlgorithm: sm2.PublicKeyAlgorithm(x509Cert.PublicKeyAlgorithm),
+		PublicKey:          x509Cert.PublicKey,
+
+		Version:      x509Cert.Version,
+		SerialNumber: x509Cert.SerialNumber,
+		Issuer:       x509Cert.Issuer,
+		Subject:      x509Cert.Subject,
+		NotBefore:    x509Cert.NotBefore,
+		NotAfter:     x509Cert.NotAfter,
+		KeyUsage:     sm2.KeyUsage(x509Cert.KeyUsage),
+
+		Extensions: x509Cert.Extensions,
+
+		ExtraExtensions: x509Cert.ExtraExtensions,
+
+		UnhandledCriticalExtensions: x509Cert.UnhandledCriticalExtensions,
+
+		//ExtKeyUsage:	[]x509.ExtKeyUsage(x509Cert.ExtKeyUsage) ,
+		UnknownExtKeyUsage: x509Cert.UnknownExtKeyUsage,
+
+		BasicConstraintsValid: x509Cert.BasicConstraintsValid,
+		IsCA:                  x509Cert.IsCA,
+		MaxPathLen:            x509Cert.MaxPathLen,
+		// MaxPathLenZero indicates that BasicConstraintsValid==true and
+		// MaxPathLen==0 should be interpreted as an actual maximum path length
+		// of zero. Otherwise, that combination is interpreted as MaxPathLen
+		// not being set.
+		MaxPathLenZero: x509Cert.MaxPathLenZero,
+
+		SubjectKeyId:   x509Cert.SubjectKeyId,
+		AuthorityKeyId: x509Cert.AuthorityKeyId,
+
+		// RFC 5280, 4.2.2.1 (Authority Information Access)
+		OCSPServer:            x509Cert.OCSPServer,
+		IssuingCertificateURL: x509Cert.IssuingCertificateURL,
+
+		// Subject Alternate Name values
+		DNSNames:       x509Cert.DNSNames,
+		EmailAddresses: x509Cert.EmailAddresses,
+		IPAddresses:    x509Cert.IPAddresses,
+
+		// Name constraints
+		PermittedDNSDomainsCritical: x509Cert.PermittedDNSDomainsCritical,
+		PermittedDNSDomains:         x509Cert.PermittedDNSDomains,
+
+		// CRL Distribution Points
+		CRLDistributionPoints: x509Cert.CRLDistributionPoints,
+
+		PolicyIdentifiers: x509Cert.PolicyIdentifiers,
+	}
+	for _, val := range x509Cert.ExtKeyUsage {
+		sm2cert.ExtKeyUsage = append(sm2cert.ExtKeyUsage, sm2.ExtKeyUsage(val))
+	}
+
+	return sm2cert
 }

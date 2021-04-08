@@ -24,7 +24,7 @@ func GetSuiteByConfig(config core.CryptoSuiteConfig) (core.CryptoSuite, error) {
 	if config.SecurityProvider() != "cncc_gm" {
 		return nil, errors.Errorf("Unsupported BCCSP Provider: %s", config.SecurityProvider())
 	}
-	
+
 	opts := getOptsByConfig(config)
 	bccsp, err := getBCCSPFromOpts(opts)
 	if err != nil {
@@ -36,7 +36,7 @@ func GetSuiteByConfig(config core.CryptoSuiteConfig) (core.CryptoSuite, error) {
 //GetSuiteWithDefaultEphemeral returns cryptosuite adaptor for bccsp with default ephemeral options (intended to aid testing)
 func GetSuiteWithDefaultEphemeral() (core.CryptoSuite, error) {
 	opts := getEphemeralOpts()
-	
+
 	bccsp, err := getBCCSPFromOpts(opts)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func GetSuiteWithDefaultEphemeral() (core.CryptoSuite, error) {
 
 func getBCCSPFromOpts(config *cncc.CNCC_GMOpts) (bccsp.BCCSP, error) {
 	f := &bccspSw.CNCC_GMFactory{}
-	
+
 	csp, err := f.Get(config)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Could not initialize BCCSP %s", f.Name())
@@ -69,13 +69,22 @@ func getOptsByConfig(c core.CryptoSuiteConfig) *cncc.CNCC_GMOpts {
 	opts := &cncc.CNCC_GMOpts{
 		HashFamily: c.SecurityAlgorithm(),
 		SecLevel:   c.SecurityLevel(),
-		FileKeystore: &cncc.FileKeystoreOpts{
-			KeyStorePath: c.KeyStorePath(),
-		},
+		// FileKeystore: &cncc.FileKeystoreOpts{
+		// 	KeyStorePath: c.KeyStorePath(),
+		// },
+		Ip:       c.NetSignIP(),
+		Port:     c.NetSignPort(),
+		Password: c.NetSignPassword(),
 		//Ephemeral: c.Ephemeral(),
 	}
+	ks := c.KeyStorePath()
+	if len(ks) > 0 {
+		opts.FileKeystore = &cncc.FileKeystoreOpts{
+			KeyStorePath: ks,
+		}
+	}
 	logger.Debugf("Initialized CNCC_GM cryptosuite, %v", c.SecurityAlgorithm())
-	
+
 	return opts
 }
 
@@ -83,9 +92,9 @@ func getEphemeralOpts() *cncc.CNCC_GMOpts {
 	opts := &cncc.CNCC_GMOpts{
 		HashFamily: "GMSM3",
 		SecLevel:   256,
-		Ephemeral: true,
+		Ephemeral:  true,
 	}
 	logger.Debug("Initialized ephemeral CNCC_GM cryptosuite with default opts")
-	
+
 	return opts
 }

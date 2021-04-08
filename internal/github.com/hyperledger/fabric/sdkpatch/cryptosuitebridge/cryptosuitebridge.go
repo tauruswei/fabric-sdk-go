@@ -13,7 +13,7 @@ package cryptosuitebridge
 import (
 	"crypto"
 	"crypto/ecdsa"
-	
+
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
 	cspsigner "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/signer"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/utils"
@@ -64,7 +64,7 @@ func SignatureToLowS(k *sm2.PublicKey, signature []byte) ([]byte, error) {
 	key.X = k.X
 	key.Y = k.Y
 	key.Curve = k.Curve
-	
+
 	return utils.SignatureToLowS(&key, signature)
 }
 

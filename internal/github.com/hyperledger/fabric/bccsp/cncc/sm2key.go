@@ -1,6 +1,5 @@
 package cncc
 
-
 import (
 	"errors"
 	"fmt"
@@ -36,7 +35,7 @@ func (k *gmsm2PrivateKey) SKI() (ski []byte) {
 	//if k.privKey == nil {
 	//	return nil
 	//}
-	
+
 	////Marshall the public key
 	//raw := elliptic.Marshal(k.privKey.Curve, k.privKey.PublicKey.X, k.privKey.PublicKey.Y)
 	//

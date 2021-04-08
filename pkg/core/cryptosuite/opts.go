@@ -23,6 +23,9 @@ type CryptoConfigOptions struct {
 	securityProviderPin
 	securityProviderLabel
 	keyStorePath
+	netsignIP
+	netsignPort
+	netsignPassword
 }
 
 type applier func()
@@ -73,6 +76,17 @@ type securityProviderLabel interface {
 type keyStorePath interface {
 	KeyStorePath() string
 }
+type netsignIP interface {
+	NetSignIP() string
+}
+
+type netsignPort interface {
+	NetSignPort() string
+}
+
+type netsignPassword interface {
+	NetSignPassword() string
+}
 
 // BuildCryptoSuiteConfigFromOptions will return an CryptoConfig instance pre-built with Optional interfaces
 // provided in fabsdk's WithConfigCrypto(opts...) call
@@ -104,6 +118,9 @@ func UpdateMissingOptsWithDefaultConfig(c *CryptoConfigOptions, d core.CryptoSui
 	s.set(c.securityProviderPin, nil, func() { c.securityProviderPin = d })
 	s.set(c.securityProviderLabel, nil, func() { c.securityProviderLabel = d })
 	s.set(c.keyStorePath, nil, func() { c.keyStorePath = d })
+	s.set(c.netsignIP, nil, func() { c.netsignIP = d })
+	s.set(c.netsignPort, nil, func() { c.netsignPort = d })
+	s.set(c.netsignPassword, nil, func() { c.netsignPassword = d })
 
 	return c
 }
@@ -127,6 +144,9 @@ func setCryptoConfigWithOptionInterface(c *CryptoConfigOptions, o interface{}) e
 	s.set(c.securityProviderPin, func() bool { _, ok := o.(securityProviderPin); return ok }, func() { c.securityProviderPin = o.(securityProviderPin) })
 	s.set(c.securityProviderLabel, func() bool { _, ok := o.(securityProviderLabel); return ok }, func() { c.securityProviderLabel = o.(securityProviderLabel) })
 	s.set(c.keyStorePath, func() bool { _, ok := o.(keyStorePath); return ok }, func() { c.keyStorePath = o.(keyStorePath) })
+	s.set(c.netsignIP, func() bool { _, ok := o.(netsignIP); return ok }, func() { c.netsignIP = o.(netsignIP) })
+	s.set(c.netsignPort, func() bool { _, ok := o.(netsignPort); return ok }, func() { c.netsignPort = o.(netsignPort) })
+	s.set(c.netsignPassword, func() bool { _, ok := o.(netsignPassword); return ok }, func() { c.netsignPassword = o.(netsignPassword) })
 
 	if !s.isSet {
 		return errors.Errorf("option %#v is not a sub interface of CryptoSuiteConfig, at least one of its functions must be implemented.", o)

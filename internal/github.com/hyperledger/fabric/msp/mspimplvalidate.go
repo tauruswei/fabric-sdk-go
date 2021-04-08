@@ -18,7 +18,7 @@ import (
 	"math/big"
 	"reflect"
 	"time"
-	
+
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm2"
 	"github.com/pkg/errors"
 )
@@ -132,13 +132,13 @@ func (msp *bccspmsp) validateCertAgainstChain(cert *sm2.Certificate, validationC
 }
 func (msp *bccspmsp) validateTLSCertAgainstChain(cert *x509.Certificate, validationChain []*x509.Certificate) error {
 	// here we know that the identity is valid; now we have to check whether it has been revoked
-	
+
 	// identify the SKI of the CA that signed this cert
 	SKI, err := getTLSSubjectKeyIdentifierFromCert(validationChain[1])
 	if err != nil {
 		return errors.WithMessage(err, "could not obtain Subject Key Identifier for signer cert")
 	}
-	
+
 	// check whether one of the CRLs we have has this cert's
 	// SKI as its AuthorityKeyIdentifier
 	for _, crl := range msp.CRL {
@@ -146,7 +146,7 @@ func (msp *bccspmsp) validateTLSCertAgainstChain(cert *x509.Certificate, validat
 		if err != nil {
 			return errors.WithMessage(err, "could not obtain Authority Key Identifier for crl")
 		}
-		
+
 		// check if the SKI of the cert that signed us matches the AKI of any of the CRLs
 		if bytes.Equal(aki, SKI) {
 			// we have a CRL, check whether the serial number is revoked
@@ -165,7 +165,7 @@ func (msp *bccspmsp) validateTLSCertAgainstChain(cert *x509.Certificate, validat
 						mspLogger.Warningf("Invalid signature over the identified CRL, error %+v", err)
 						continue
 					}
-					
+
 					// A CRL also includes a time of revocation so that
 					// the CA can say "this cert is to be revoked starting
 					// from this time"; however here we just assume that
@@ -177,7 +177,7 @@ func (msp *bccspmsp) validateTLSCertAgainstChain(cert *x509.Certificate, validat
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -337,11 +337,12 @@ func getSubjectKeyIdentifierFromCert(cert *sm2.Certificate) ([]byte, error) {
 
 	return nil, errors.New("subjectKeyIdentifier not found in certificate")
 }
+
 // getTLSSubjectKeyIdentifierFromCert returns the Subject Key Identifier for the supplied certificate
 // Subject Key Identifier is an identifier of the public key of this certificate
 func getTLSSubjectKeyIdentifierFromCert(cert *x509.Certificate) ([]byte, error) {
 	var SKI []byte
-	
+
 	for _, ext := range cert.Extensions {
 		// Subject Key Identifier is identified by the following ASN.1 tag
 		// subjectKeyIdentifier (2 5 29 14) (see https://tools.ietf.org/html/rfc3280.html)
@@ -350,10 +351,10 @@ func getTLSSubjectKeyIdentifierFromCert(cert *x509.Certificate) ([]byte, error) 
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal Subject Key Identifier")
 			}
-			
+
 			return SKI, nil
 		}
 	}
-	
+
 	return nil, errors.New("subjectKeyIdentifier not found in certificate")
 }

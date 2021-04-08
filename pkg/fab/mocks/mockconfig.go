@@ -308,6 +308,21 @@ func (c *MockConfig) SecurityProviderLabel() string {
 	return ""
 }
 
+//NetSignIP ...
+func (c *MockConfig) NetSignIP() string {
+	return ""
+}
+
+//NetSignPort ...
+func (c *MockConfig) NetSignPort() string {
+	return ""
+}
+
+//NetSignPassword ...
+func (c *MockConfig) NetSignPassword() string {
+	return ""
+}
+
 //SecurityProviderPin ...
 func (c *MockConfig) SecurityProviderPin() string {
 	return ""

@@ -6,12 +6,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm2"
 	"io/ioutil"
 	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm2"
 )
 
 /**
@@ -25,9 +26,10 @@ import (
 func RandStringInt() string {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, _ := rand.Int(rand.Reader, serialNumberLimit)
-	
+
 	return serialNumber.String()
 }
+
 /**
 环境变量格式：
 CORE_PEER_BCCSP_CNCC_GM_IP=111.63.61.21,111.63.61.22;17.63.61.21,17.63.61.22
@@ -35,7 +37,7 @@ CORE_PEER_BCCSP_CNCC_GM_PORT=50060,50061;50060,50061
 CORE_PEER_BCCSP_CNCC_GM_password=123456,123456;123456,123456
 理论上用  “;”  来区分 北京和上海的签名服务器配置
 */
-func FindPKCS11Lib(opts CNCC_GMOpts) {
+func FindPKCS11Lib(opts CNCC_GMOpts, impl *Impl) {
 	var ip, port, passwd string
 	ip = os.Getenv("CORE_PEER_BCCSP_CNCC_GM_IP")
 	if ip == "" {
@@ -49,15 +51,14 @@ func FindPKCS11Lib(opts CNCC_GMOpts) {
 	if passwd == "" {
 		passwd = opts.Password
 	}
-	
 	ip = strings.Trim(ip, ",;")
 	port = strings.Trim(port, ",;")
 	passwd = strings.Trim(passwd, ",;")
-	
+
 	split1 := strings.Split(ip, ";")
 	split2 := strings.Split(port, ";")
 	split3 := strings.Split(passwd, ";")
-	
+
 	if len(split1) != len(split2) || len(split1) != len(split3) || len(split2) != len(split3) {
 		panic("netsign config error")
 	}
@@ -65,10 +66,10 @@ func FindPKCS11Lib(opts CNCC_GMOpts) {
 	//data_centor := os.Getenv("NETSIGN_CENTOR")
 	//if strings.EqualFold("beijing", data_centor) {
 	if len(split1) == 1 {
-		BJ_NetSignConfig = parseNetsigns(split1[0], split2[0], split3[0])
+		impl.BJ_NetSignConfig = parseNetsigns(split1[0], split2[0], split3[0])
 	} else if len(split1) == 2 {
-		BJ_NetSignConfig = parseNetsigns(split1[0], split2[0], split3[0])
-		SH_NetSignConfig = parseNetsigns(split1[1], split2[1], split3[1])
+		impl.BJ_NetSignConfig = parseNetsigns(split1[0], split2[0], split3[0])
+		impl.SH_NetSignConfig = parseNetsigns(split1[1], split2[1], split3[1])
 	} else {
 		panic("netsign config error")
 	}
@@ -87,7 +88,7 @@ func FindPKCS11Lib(opts CNCC_GMOpts) {
 
 func parseNetsigns(ip, port, passwd string) []*NetSignConfig {
 	var signs []*NetSignConfig
-	
+
 	ips := strings.Split(ip, ",")
 	ports := strings.Split(port, ",")
 	passwds := strings.Split(passwd, ",")
@@ -104,6 +105,7 @@ func parseNetsigns(ip, port, passwd string) []*NetSignConfig {
 	}
 	return signs
 }
+
 func SaveSKI(path, ski string) error {
 	if ski == "" {
 		return errors.New("Not a valid ski, shouldn't be empty")
@@ -111,7 +113,7 @@ func SaveSKI(path, ski string) error {
 	if path == "" {
 		return errors.New("Not a valid keystore path, shouldn't be empty")
 	}
-	
+
 	filename := filepath.Join(path, hex.EncodeToString([]byte(ski))+"_sk")
 	if err := ioutil.WriteFile(filename, []byte(ski), 0700); err != nil {
 		return err
@@ -119,15 +121,15 @@ func SaveSKI(path, ski string) error {
 	return nil
 }
 
-func GetPublicKeyExample() *sm2.PublicKey{
-	p10:="MIHXMHwCAQAwHDEaMBgGA1UEAwwRc20yX2NhcGlfZ2VuXzIwNDgwWTATBgcqhkjOPQIBBggqgRzPVQGCLQNCAAR62m/6e+iPYvHRpPzLxLDCapIqNq6lfWYlr8i9+d7RyfcC8jD4Mg9NKVqvqwdRiYwj4mXZoGkPw9+McSTMdOT3MAwGCCqBHM9VAYN1BQADSQAwRgIhAIf2FLo9iTkafJn1ikw66M6oXsd8NRHAGLFlCUqzIk5dAiEA7MfoosNH5NE5O6RvKv4xeKgIgNni2hAGTm8r3jMlFWQ="
+func GetPublicKeyExample() *sm2.PublicKey {
+	p10 := "MIHXMHwCAQAwHDEaMBgGA1UEAwwRc20yX2NhcGlfZ2VuXzIwNDgwWTATBgcqhkjOPQIBBggqgRzPVQGCLQNCAAR62m/6e+iPYvHRpPzLxLDCapIqNq6lfWYlr8i9+d7RyfcC8jD4Mg9NKVqvqwdRiYwj4mXZoGkPw9+McSTMdOT3MAwGCCqBHM9VAYN1BQADSQAwRgIhAIf2FLo9iTkafJn1ikw66M6oXsd8NRHAGLFlCUqzIk5dAiEA7MfoosNH5NE5O6RvKv4xeKgIgNni2hAGTm8r3jMlFWQ="
 	decodeString, err := base64.StdEncoding.DecodeString(p10)
-	if(nil!=err){
-		logger.Errorf("base64 decode p10 error: %s",err)
+	if nil != err {
+		logger.Errorf("base64 decode p10 error: %s", err)
 	}
 	request, err := sm2.ParseCertificateRequest(decodeString)
-	if(nil!=err){
-		logger.Errorf("parse certificate request err: %s",err)
+	if nil != err {
+		logger.Errorf("parse certificate request err: %s", err)
 	}
 	return (request.PublicKey).(*sm2.PublicKey)
 }

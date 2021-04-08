@@ -13,6 +13,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
 )
 
 var requestIDKey = requestIDKeyType{}
@@ -48,6 +49,10 @@ func (r *requestID) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	ctx := context.WithValue(req.Context(), requestIDKey, reqID)
 	req = req.WithContext(ctx)
+
+	// http响应拆分字符过滤
+	strings.Replace(reqID, "\n", "", -1)
+	strings.Replace(reqID, "\r", "", -1)
 
 	w.Header().Add("X-Request-Id", reqID)
 

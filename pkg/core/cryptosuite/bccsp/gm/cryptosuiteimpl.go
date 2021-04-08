@@ -25,7 +25,7 @@ func GetSuiteByConfig(config core.CryptoSuiteConfig) (core.CryptoSuite, error) {
 	if config.SecurityProvider() != "gm" {
 		return nil, errors.Errorf("Unsupported BCCSP Provider: %s", config.SecurityProvider())
 	}
-	
+
 	opts := getOptsByConfig(config)
 	bccsp, err := getBCCSPFromOpts(opts)
 	if err != nil {
@@ -37,7 +37,7 @@ func GetSuiteByConfig(config core.CryptoSuiteConfig) (core.CryptoSuite, error) {
 //GetSuiteWithDefaultEphemeral returns cryptosuite adaptor for bccsp with default ephemeral options (intended to aid testing)
 func GetSuiteWithDefaultEphemeral() (core.CryptoSuite, error) {
 	opts := getEphemeralOpts()
-	
+
 	bccsp, err := getBCCSPFromOpts(opts)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func GetSuiteWithDefaultEphemeral() (core.CryptoSuite, error) {
 
 func getBCCSPFromOpts(config *bccspSw.GmOpts) (bccsp.BCCSP, error) {
 	f := &bccspSw.GMFactory{}
-	
+
 	csp, err := f.Get(config)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Could not initialize BCCSP %s", f.Name())
@@ -76,7 +76,7 @@ func getOptsByConfig(c core.CryptoSuiteConfig) *bccspSw.GmOpts {
 		//Ephemeral: c.Ephemeral(),
 	}
 	logger.Debugf("Initialized SW cryptosuite11111, %v", c.SecurityAlgorithm())
-	
+
 	return opts
 }
 
@@ -87,6 +87,6 @@ func getEphemeralOpts() *bccspSw.GmOpts {
 		Ephemeral:  true,
 	}
 	logger.Debug("Initialized ephemeral SW cryptosuite with default opts")
-	
+
 	return opts
 }

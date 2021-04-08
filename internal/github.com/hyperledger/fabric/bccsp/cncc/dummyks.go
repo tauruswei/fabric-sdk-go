@@ -8,7 +8,7 @@ package cncc
  */
 import (
 	"errors"
-	
+
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
 )
 

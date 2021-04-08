@@ -3,7 +3,7 @@ package cncc
 import (
 	"crypto/sha256"
 	"errors"
-	
+
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
 )
 
@@ -26,7 +26,7 @@ func (k *gmsm4PrivateKey) Bytes() (raw []byte, err error) {
 	if k.exportable {
 		return k.privKey, nil
 	}
-	
+
 	return nil, errors.New("Not supported")
 }
 

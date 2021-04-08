@@ -4,8 +4,10 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"fmt"
-	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm2"
+	"strconv"
 	"strings"
+
+	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm2"
 )
 
 /**
@@ -28,8 +30,8 @@ var (
 //For EC SM2 and RSA
 func (csp *Impl) getSM2Key(ski []byte) (pubKey *sm2.PublicKey, isPriv bool, err error) {
 
-	label := fmt.Sprintf("SM2SignKey%s", string(ski))
-	logger.Debugf("Label[%s]", label)
+	label := KeyPrefix + string(ski)
+	logger.Infof("Label[%s]", label)
 	ski = []byte(label)
 
 	pubKey = GetPublicKeyExample()
@@ -40,18 +42,24 @@ func (csp *Impl) getSM2Key(ski []byte) (pubKey *sm2.PublicKey, isPriv bool, err 
 func (csp *Impl) generateSM2Key(ephemeral bool) (ski []byte, pubKey *sm2.PublicKey, err error) {
 	netsign := csp.netsign
 	session := csp.getSession()
+	if session == nil {
+		return nil, nil, fmt.Errorf("open netsign err")
+	}
 	defer csp.returnSession(session)
 
 	//生成密钥的索引
 	id := RandStringInt()
-	keyLbel := fmt.Sprintf("SM2SignKey%s", id)
+
+	keyLbel := KeyPrefix + id
+
 	ski = []byte(keyLbel)
 
 	p10, ret := netsign.GenP10(session.NS_sesion, "CN=CNCC", keyLbel, "SM2")
 
 	if ret == -8034 {
-		logger.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: generate P10 error: %d", ret)
-		return []byte(id), nil, fmt.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: generate P10 error: %d", ret)
+		logger.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: generate P10 error: %d, NetSignConfig[%+v]", ret, session.NSC)
+		return []byte(id), nil, fmt.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: generate P10 error: %d,"+
+			"NetSignConfig[%+v]", ret, session.NSC)
 	} else if (ret != -8034) && (ret != 0) {
 		logger.Errorf("generate P10 error: %d", ret)
 		return []byte(id), nil, fmt.Errorf("generate P10 error: %d", ret)
@@ -59,12 +67,17 @@ func (csp *Impl) generateSM2Key(ephemeral bool) (ski []byte, pubKey *sm2.PublicK
 	replace1 := strings.Replace(string(p10), "-----BEGIN CERTIFICATE REQUEST-----", "", -1)
 	replace2 := strings.Replace(replace1, "-----END CERTIFICATE REQUEST-----", "", -1)
 	replace := strings.Replace(replace2, "\n", "", -1)
+
 	certificateRequest, err := base64.StdEncoding.DecodeString(replace)
 	if err != nil {
 		logger.Errorf("base64 decode error: %s", err.Error())
 		return []byte(id), nil, fmt.Errorf("base64 decode error: %s", err.Error())
 	}
 	request, err := sm2.ParseCertificateRequest(certificateRequest)
+	if err != nil {
+		logger.Errorf("parse  cert request error: %s", err.Error())
+		return []byte(id), nil, fmt.Errorf("parse  cert request error: %s", err.Error())
+	}
 	pubKey = (request.PublicKey).(*sm2.PublicKey)
 
 	logger.Infof("KeyLabel[%s], SKI[%s], Ephemeral[%t]", keyLbel, id, ephemeral)
@@ -75,7 +88,10 @@ func (csp *Impl) generateSM2Key(ephemeral bool) (ski []byte, pubKey *sm2.PublicK
 func (csp *Impl) signP11SM2(ski []byte, msg []byte) (sig []byte, err error) {
 	ns := csp.netsign
 	session := csp.getSession()
-	keylabel := fmt.Sprintf("SM2SignKey%s", string(ski))
+	if session == nil {
+		return nil, fmt.Errorf("open netsign err")
+	}
+	keylabel := KeyPrefix + string(ski)
 
 	sig, ret := ns.Sign(session.NS_sesion, 0, msg, keylabel, "sm3")
 	if ret == 0 {
@@ -86,12 +102,45 @@ func (csp *Impl) signP11SM2(ski []byte, msg []byte) (sig []byte, err error) {
 	} else if ret == -8034 {
 		logger.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: KeyLabel[%s], Msg[%s], NetSignConfig[%+v], NetSign: sign failed, "+
 			"connect to netsign timeout", keylabel, base64.StdEncoding.EncodeToString(msg), session.NSC)
-		return nil, fmt.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: KeyLabel[%s], Msg[%s], NetSignConfig[%+v], "+
-			"NetSign: sign failed, connect to netsign timeout", keylabel, base64.StdEncoding.EncodeToString(msg), session.NSC)
+		ns.CloseNetSign(session.NS_sesion)
+		var ALL_NetSignConfig []*NetSignConfig
+		for _, v := range csp.BJ_NetSignConfig {
+			ALL_NetSignConfig = append(ALL_NetSignConfig, v)
+		}
+		for _, v := range csp.SH_NetSignConfig {
+			ALL_NetSignConfig = append(ALL_NetSignConfig, v)
+		}
+		for _, v := range ALL_NetSignConfig {
+			port, _ := strconv.Atoi(v.Port)
+			socketFd, ret := ns.OpenNetSign(v.Ip, v.Passwd, port)
+			if ret != 0 {
+				logger.Errorf("LOGGER-CONN-SIGNAGENT-FAIL: open netsign err: ip [%s], port [%d], passwd [%s]", v.Ip, port, v.Passwd)
+				continue
+			} else {
+				sig, ret := ns.Sign(socketFd, 0, msg, keylabel, "sm3")
+				defer ns.CloseNetSign(socketFd)
+				if ret == 0 {
+					logger.Debugf("KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v]", keylabel,
+						base64.StdEncoding.EncodeToString(msg), base64.StdEncoding.EncodeToString(sig), v)
+					return sig, nil
+				} else if ret == -8034 {
+					logger.Errorf("LOGGER-CONN-SIGNAGENT-FAIL: KeyLabel[%s], Msg[%s], NetSignConfig[%+v], NetSign: sign failed, "+
+						"connect to netsign timeout", keylabel, base64.StdEncoding.EncodeToString(msg), v)
+					continue
+				} else {
+					logger.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], NetSignConfig[%+v], NetSign: sign failed [%d]", keylabel,
+						base64.StdEncoding.EncodeToString(msg), v, ret)
+					return nil, fmt.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], NetSignConfig[%+v], NetSign: sign failed [%d]", keylabel,
+						base64.StdEncoding.EncodeToString(msg), v, ret)
+				}
+
+			}
+		}
+		return nil, fmt.Errorf("no netsign is avaliable")
 	} else {
 		logger.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], NetSignConfig[%+v], NetSign: sign failed [%d]", keylabel,
 			base64.StdEncoding.EncodeToString(msg), session.NSC, ret)
-		//csp.returnSession(session)
+		csp.returnSession(session)
 		return nil, fmt.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], NetSignConfig[%+v], NetSign: sign failed [%d]", keylabel,
 			base64.StdEncoding.EncodeToString(msg), session.NSC, ret)
 	}
@@ -99,29 +148,42 @@ func (csp *Impl) signP11SM2(ski []byte, msg []byte) (sig []byte, err error) {
 func (csp *Impl) uploadCert(ski []byte, certBytes []byte) (err error) {
 	ns := csp.netsign
 	session := csp.getSession()
-	defer csp.returnSession(session)
-	keylabel := fmt.Sprintf("SM2SignKey%s", string(ski))
-
+	if session == nil {
+		return fmt.Errorf("open netsign err")
+	}
+	keylabel := KeyPrefix + string(ski)
 	ret := ns.UploadCert(session.NS_sesion, keylabel, certBytes)
 
 	if ret == 0 {
 		logger.Infof("KeyLabel[%s], upload cert complete!", keylabel)
+		ns.CloseNetSign(session.NS_sesion)
 		return nil
 	} else if ret == -8034 {
-		logger.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: upload cert error %d", ret)
-		return fmt.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: upload cert error %d", ret)
+		logger.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: upload cert error %d, NetSignConfig[%+v]", ret, session.NSC)
+		ns.CloseNetSign(session.NS_sesion)
+		return fmt.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: upload cert error %d, NetSignConfig[%+v]", ret, session.NSC)
 	} else {
-		logger.Errorf("upload cert error %d", ret)
-		return fmt.Errorf("upload cert error %d", ret)
+		logger.Errorf("upload cert error %d, NetSignConfig[%+v], certBytes[%s]", ret, session.NSC,
+			base64.StdEncoding.EncodeToString(certBytes))
+		csp.returnSession(session)
+		return fmt.Errorf("upload cert error %d, NetSignConfig[%+v], certBytes[%s]", ret, session.NSC,
+			base64.StdEncoding.EncodeToString(certBytes))
 	}
 }
 
-func (csp *Impl) verifyP11SM2(ski, msg []byte, sig []byte) (valid bool, err error) {
+func (csp *Impl) verifyP11SM2(ski, msg, sig []byte) (valid bool, err error) {
 	ns := csp.netsign
 	session := csp.getSession()
-	keylabel := fmt.Sprintf("SM2SignKey%s", string(ski))
+	if session == nil {
+		return false, fmt.Errorf("open netsign err")
+	}
+	keylabel := KeyPrefix + string(ski)
+	ski = []byte(keylabel)
 
-	ret := ns.Verify(session.NS_sesion, 1, msg, sig, keylabel, "sm3")
+	// 是否验证crl，0表示验证，1表示不验证
+	isVerifyCrl := 0
+
+	ret := ns.Verify(session.NS_sesion, isVerifyCrl, msg, sig, keylabel, "sm3")
 
 	if ret == 0 {
 		logger.Debugf("KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v]", keylabel,
@@ -132,55 +194,49 @@ func (csp *Impl) verifyP11SM2(ski, msg []byte, sig []byte) (valid bool, err erro
 		logger.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v], "+
 			"NetSign: verify failed, connect to netsign timeout",
 			keylabel, base64.StdEncoding.EncodeToString(msg), base64.StdEncoding.EncodeToString(sig), session.NSC)
-		return false, fmt.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v], NetSign: verify failed, connect to netsign timeout",
-			keylabel, base64.StdEncoding.EncodeToString(msg), base64.StdEncoding.EncodeToString(sig), session.NSC)
+		ns.CloseNetSign(session.NS_sesion)
+
+		var ALL_NetSignConfig []*NetSignConfig
+		for _, v := range csp.BJ_NetSignConfig {
+			ALL_NetSignConfig = append(ALL_NetSignConfig, v)
+		}
+		for _, v := range csp.SH_NetSignConfig {
+			ALL_NetSignConfig = append(ALL_NetSignConfig, v)
+		}
+		for _, v := range ALL_NetSignConfig {
+			port, _ := strconv.Atoi(v.Port)
+			socketFd, ret := ns.OpenNetSign(v.Ip, v.Passwd, port)
+			if ret != 0 {
+				logger.Errorf("LOGGER-CONN-SIGNAGENT-FAIL: open netsign err: ip [%s], port [%d], passwd [%s]", v.Ip, port, v.Passwd)
+				continue
+			} else {
+				ret := ns.Verify(session.NS_sesion, isVerifyCrl, msg, sig, keylabel, "sm3")
+				defer ns.CloseNetSign(socketFd)
+				if ret == 0 {
+					logger.Debugf("KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v]", keylabel,
+						base64.StdEncoding.EncodeToString(msg), base64.StdEncoding.EncodeToString(sig), v)
+					return true, nil
+				} else if ret == -8034 {
+					logger.Errorf("LOGGER-CONN-SIGNAGENT-FAIL: KeyLabel[%s], Msg[%s], NetSignConfig[%+v], NetSignConfig[%+v], NetSign: sign failed, "+
+						"connect to netsign timeout", keylabel, base64.StdEncoding.EncodeToString(msg), base64.StdEncoding.EncodeToString(sig), v)
+					continue
+				} else {
+					logger.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v], "+
+						"NetSign: verify failed [%d]", keylabel, base64.StdEncoding.EncodeToString(msg),
+						base64.StdEncoding.EncodeToString(sig), v, ret)
+					return false, fmt.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v], "+
+						"NetSign: verify failed [%d]", keylabel, base64.StdEncoding.EncodeToString(msg),
+						base64.StdEncoding.EncodeToString(sig), v, ret)
+				}
+
+			}
+		}
+		return false, fmt.Errorf("no netsign is avaliable")
 	} else {
-		//csp.returnSession(session)
-		logger.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v], NetSign: verify failed [%d]", keylabel, base64.StdEncoding.EncodeToString(msg), base64.StdEncoding.EncodeToString(sig),
-			session.NSC, ret)
+		logger.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v], "+
+			"NetSign: verify failed [%d]", keylabel, base64.StdEncoding.EncodeToString(msg), base64.StdEncoding.EncodeToString(sig), session.NSC, ret)
+		csp.returnSession(session)
 		return false, fmt.Errorf("LOGGER-SIGNVERIFY: KeyLabel[%s], Msg[%s], Signature[%s], NetSignConfig[%+v], "+
 			"NetSign: verify failed [%d]", keylabel, base64.StdEncoding.EncodeToString(msg), base64.StdEncoding.EncodeToString(sig), session.NSC, ret)
-	}
-}
-func (csp *Impl) hash(msg []byte) (digest []byte, err error) {
-	ns := csp.netsign
-	session := csp.getSession()
-	digest, ret := ns.Hash(session.NS_sesion, "sm3", msg)
-	if ret == 0 {
-		logger.Infof("Msg[%s]", base64.StdEncoding.EncodeToString(msg))
-		return digest, nil
-	} else if ret == -8034 {
-		logger.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: Msg[%s], NetSignConfig[%+v], NetSign: hash failed, connect to netsign timeout",
-			base64.StdEncoding.EncodeToString(msg), session.NSC)
-		return nil, fmt.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: Msg[%s], NetSignConfig[%+v], NetSign: hash failed, connect to netsign timeout",
-			base64.StdEncoding.EncodeToString(msg), session.NSC)
-	} else {
-		//csp.returnSession(session)
-		logger.Errorf("Msg[%s], NetSignConfig[%+v], NetSign: verify failed [%d]", base64.StdEncoding.EncodeToString(msg),
-			session.NSC, ret)
-		return nil, fmt.Errorf("Msg[%s], NetSignConfig[%+v], NetSign: verify failed [%d]", base64.StdEncoding.EncodeToString(msg),
-			session.NSC, ret)
-	}
-}
-func (csp *Impl) deleteKeyPair(ski []byte) (valid bool, err error) {
-	ns := csp.netsign
-	session := csp.getSession()
-	keylabel := fmt.Sprintf("SM2SignKey%s", string(ski))
-
-	err, ret := ns.DeleteKeyPair(session.NS_sesion, keylabel)
-
-	if ret == 0 {
-		logger.Infof("KeyLabel[%s], delete key pair success", keylabel)
-		csp.returnSession(session)
-		return true, nil
-	} else if ret == -8034 {
-		logger.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: KeyLabel[%s], NetSignConfig[%+v], NetSign: delete key pair failed, connect to netsign timeout",
-			keylabel, session.NSC)
-		return false, fmt.Errorf("LOGGER-CONN-SIGNAGENT-TIMEOUT: KeyLabel[%s], NetSignConfig[%+v], NetSign: delete key pair failed, connect to netsign timeout",
-			keylabel, session.NSC)
-	} else {
-		//csp.returnSession(session)
-		logger.Errorf("KeyLabel[%s], NetSignConfig[%+v], NetSign: delete key pair failed [%d]", keylabel, session.NSC, ret)
-		return false, fmt.Errorf("KeyLabel[%s], NetSignConfig[%+v], NetSign: delete key pair failed [%d]", keylabel, session.NSC, ret)
 	}
 }

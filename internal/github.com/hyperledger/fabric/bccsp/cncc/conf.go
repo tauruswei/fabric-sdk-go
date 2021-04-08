@@ -11,9 +11,10 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
-	"golang.org/x/crypto/sha3"
 	"hash"
-	
+
+	"golang.org/x/crypto/sha3"
+
 	"github.com/tjfoc/gmsm/sm3"
 )
 
@@ -89,17 +90,17 @@ func (conf *config) setSecurityLevelSHA3(level int) (err error) {
 	return
 }
 
-//CNCC_GMpts contains options for the CNCC_GMFactory
+//CNCC_GMOpts contains options for the CNCC_GMFactory
 type CNCC_GMOpts struct {
 	// Default algorithms when not specified (Deprecated?)
 	SecLevel   int    `mapstructure:"security" json:"security" yaml:"Security"`
 	HashFamily string `mapstructure:"hash" json:"hash" yaml:"Hash"`
-	
+
 	// Keystore options
 	Ephemeral     bool               `mapstructure:"tempkeys,omitempty" json:"tempkeys,omitempty" yaml:"Ephemeral"`
 	FileKeystore  *FileKeystoreOpts  `mapstructure:"filekeystore,omitempty" json:"filekeystore,omitempty", yaml:"FileKeyStore"`
 	DummyKeystore *DummyKeystoreOpts `mapstructure:"dummykeystore,omitempty" json:"dummykeystore,omitempty"`
-	
+
 	// PKCS11 options
 	Library    string `mapstructure:"library" json:"library" yaml:"Library"`
 	Ip         string `mapstructure:"ip" json:"ip" yaml:"Ip"`

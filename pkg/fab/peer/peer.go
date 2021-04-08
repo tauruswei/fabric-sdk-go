@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cast"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
-	
+
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm2"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/common/verifier"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/logging"
@@ -26,17 +26,17 @@ var logger = logging.NewLogger("fabsdk/fab")
 // Peer represents a node in the target blockchain network to which
 // HFC sends endorsement proposals, transaction ordering or query requests.
 type Peer struct {
-	config      fab.EndpointConfig
+	config         fab.EndpointConfig
 	tlsCertificate *x509.Certificate
-	certificate *sm2.Certificate
-	serverName  string
-	processor   fab.ProposalProcessor
-	mspID       string
-	url         string
-	kap         keepalive.ClientParameters
-	failFast    bool
-	inSecure    bool
-	commManager fab.CommManager
+	certificate    *sm2.Certificate
+	serverName     string
+	processor      fab.ProposalProcessor
+	mspID          string
+	url            string
+	kap            keepalive.ClientParameters
+	failFast       bool
+	inSecure       bool
+	commManager    fab.CommManager
 }
 
 // Option describes a functional parameter for the New constructor
@@ -61,7 +61,7 @@ func New(config fab.EndpointConfig, opts ...Option) (*Peer, error) {
 		// TODO: config is declaring TLS but cert & serverHostOverride is being passed-in...
 		endorseRequest := peerEndorserRequest{
 			target:             peer.url,
-			tlsCertificate:      peer.tlsCertificate,
+			tlsCertificate:     peer.tlsCertificate,
 			certificate:        peer.certificate,
 			serverHostOverride: peer.serverName,
 			config:             peer.config,

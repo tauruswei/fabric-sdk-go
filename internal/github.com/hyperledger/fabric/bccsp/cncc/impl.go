@@ -4,18 +4,24 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
-	"github.com/hyperledger/fabric-sdk-go/internal/github.com/TaurusWei/go-netsign/netsign"
-	
+	"net"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"hash"
+
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
+	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/netsign"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/sw"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm2"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/tjfoc/gmsm/sm3"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/sha3"
-	"hash"
-	"strconv"
 )
+
 /**
  * @Author: WeiBingtao/13156050650@163.com
  * @Version: 1.0
@@ -23,13 +29,13 @@ import (
  * @Date: 2020/9/15 上午11:29
  */
 
-
 var (
-	logger            = flogging.MustGetLogger("cncc_gm")
-	SessionCacheSize  = 10
-	BJ_NetSignConfig  []*NetSignConfig
-	SH_NetSignConfig  []*NetSignConfig
-	BAK_NetSignConfig []*NetSignConfig
+	logger           = flogging.MustGetLogger("cncc_gm")
+	SessionCacheSize = 1
+	//BJ_NetSignConfig  []*NetSignConfig
+	//SH_NetSignConfig  []*NetSignConfig
+	//BAK_NetSignConfig []*NetSignConfig
+	KeyPrefix = "Baas"
 )
 
 type NetSignConfig struct {
@@ -41,19 +47,21 @@ type NetSignSesssion struct {
 	NSC       *NetSignConfig
 	NS_sesion int
 }
-
 type Impl struct {
 	bccsp.BCCSP // 内嵌BCCSP接口
-	
+
 	conf *config        // conf配置
 	ks   bccsp.KeyStore // key存储对象，用于存储及获取key
-	
+
 	netsign  *netsign.NetSign      // 签名服务器实例
 	Sessions chan *NetSignSesssion // 会话标识符通道，默认10（sessionCacheSize = 10）
-	
+
 	noPrivImport bool // 是否禁止导入私钥
 	softVerify   bool // 是否以软件方式验证签名
-	
+
+	BJ_NetSignConfig  []*NetSignConfig
+	SH_NetSignConfig  []*NetSignConfig
+	BAK_NetSignConfig []*NetSignConfig
 }
 
 func New(opts CNCC_GMOpts, keyStore bccsp.KeyStore) (bccsp.BCCSP, error) {
@@ -63,30 +71,31 @@ func New(opts CNCC_GMOpts, keyStore bccsp.KeyStore) (bccsp.BCCSP, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed initializing configuration [%s]", err)
 	}
-	
+
 	swCSP, err := sw.New(keyStore)
 	if err != nil {
 		return nil, fmt.Errorf("Failed initializing fallback SW BCCSP [%s]", err)
 	}
-	
+
 	// Check KeyStore
 	if keyStore == nil {
 		return nil, errors.New("Invalid bccsp.KeyStore instance. It must be different from nil.")
 	}
-	
-	FindPKCS11Lib(opts)
-	
-	sessions := make(chan *NetSignSesssion, len(BJ_NetSignConfig)*SessionCacheSize)
+
+	csp := &Impl{}
+
+	FindPKCS11Lib(opts, csp)
+	sessions := make(chan *NetSignSesssion, SessionCacheSize)
 	NetSign := netsign.NetSign{}
 	var ok bool
-	// 初始化10个会话句柄
+	// 初始化 SessionCacheSize 个会话句柄
 	for i := 0; i < SessionCacheSize; i++ {
-		
-		for _, netSignConfig := range BJ_NetSignConfig {
-			
+
+		for _, netSignConfig := range csp.BJ_NetSignConfig {
+
 			ip := netSignConfig.Ip
 			passwd := netSignConfig.Passwd
-			
+
 			port, err := strconv.Atoi(netSignConfig.Port)
 			if err != nil {
 				panic("Get port error !")
@@ -101,25 +110,193 @@ func New(opts CNCC_GMOpts, keyStore bccsp.KeyStore) (bccsp.BCCSP, error) {
 			break
 		}
 	}
+	// 如果 本数据中心的签名服务器链接不上，会链接其他中心的签名服务器
+	if len(sessions) == 0 {
+		// 初始化  SessionCacheSize 个会话句柄
+		for i := 0; i < SessionCacheSize; i++ {
+
+			for _, netSignConfig := range csp.SH_NetSignConfig {
+
+				ip := netSignConfig.Ip
+				passwd := netSignConfig.Passwd
+
+				port, err := strconv.Atoi(netSignConfig.Port)
+				if err != nil {
+					panic("Get port error !")
+				}
+				socketFd, ret := NetSign.OpenNetSign(ip, passwd, port)
+				if ret != 0 {
+					logger.Errorf("LOGGER-CONN-SIGNAGENT-FAIL: open netsign err: ip [%s], port [%d], passwd [%s]", ip, port, passwd)
+					continue
+				}
+				sessions <- &NetSignSesssion{netSignConfig, socketFd}
+				ok = true
+				break
+			}
+		}
+	}
 	if !ok {
 		return nil, errors.New("no netsign avaliable!")
 	}
-	csp := &Impl{swCSP, conf, keyStore, &NetSign, sessions, opts.Sensitive, opts.SoftVerify}
+
+	csp.BCCSP = swCSP
+	csp.conf = conf
+	csp.ks = keyStore
+	csp.netsign = &NetSign
+	csp.Sessions = sessions
+	csp.noPrivImport = opts.Sensitive
+	csp.softVerify = opts.SoftVerify
+
+	time1 := os.Getenv("NETSIGN_HEALTH_CHECK_TIME")
+	if time1 == "" {
+		time1 = "60"
+	}
+	health_check_time, err := strconv.Atoi(time1)
+	if err != nil {
+		panic("get netsign health check time error")
+	}
+	go TimeTick(health_check_time, csp)
 	return csp, nil
 }
-//上传证书
-func(csp *Impl)Uploadcert(ski []byte,certBytes []byte)error{
-	
-	return csp.uploadCert(ski,certBytes)
+
+func TimeTick(helth_check_time int, impl *Impl) {
+	for range time.Tick(time.Duration(helth_check_time) * time.Second) {
+		//bccsp := bccspMap["CNCC_GM"]
+		//switch bccsp.(type) {
+		//case *Impl:
+		fmt.Printf("BJ_NetSignConfig: ")
+		for _, value := range impl.BJ_NetSignConfig {
+			fmt.Printf("%v", value)
+
+		}
+		fmt.Println("")
+		fmt.Printf("SH_NetSignConfig: ")
+		for _, value := range impl.SH_NetSignConfig {
+			fmt.Printf("%v", value)
+
+		}
+		fmt.Println("")
+		fmt.Printf("BAK_NetSignConfig: ")
+		for _, value := range impl.BAK_NetSignConfig {
+			fmt.Printf("%v", value)
+
+		}
+		fmt.Println("")
+		if len(impl.BAK_NetSignConfig) > 0 {
+			address := make([]string, len(impl.BAK_NetSignConfig), len(impl.BAK_NetSignConfig))
+			for i, v := range impl.BAK_NetSignConfig {
+				address[i] = net.JoinHostPort(v.Ip, v.Port)
+			}
+			status := netsign.CheckAllNetsignStatus(address, len(impl.BAK_NetSignConfig))
+
+			var result1 int
+
+			for i, _ := range impl.BAK_NetSignConfig {
+				result1 += status[i]
+			}
+			if result1 < len(impl.BAK_NetSignConfig) {
+				impl.SH_NetSignConfig = impl.BJ_NetSignConfig
+				impl.BJ_NetSignConfig = impl.BAK_NetSignConfig
+				impl.BAK_NetSignConfig = nil
+				//cncc.NetSignStatus=true
+				impl.Sessions = make(chan *NetSignSesssion, SessionCacheSize)
+				Netsign := netsign.NetSign{}
+				// 初始化cncc.SessionCacheSize个会话句柄
+				for i := 0; i < SessionCacheSize; i++ {
+					for _, netSignConfig := range impl.BJ_NetSignConfig {
+						ip := netSignConfig.Ip
+						passwd := netSignConfig.Passwd
+
+						port, err := strconv.Atoi(netSignConfig.Port)
+						if err != nil {
+							panic("Get port error !")
+						}
+						socketFd, ret := Netsign.OpenNetSign(ip, passwd, port)
+						if ret != 0 {
+							//cncc.NetSignStatus=false
+							logger.Errorf("LOGGER-CONN-SIGNAGENT-FAIL: open netsign err: ip [%s], port [%d],"+
+								" passwd [%s]", ip, port, passwd)
+							continue
+						}
+						impl.Sessions <- &NetSignSesssion{netSignConfig, socketFd}
+						break
+					}
+				}
+			}
+		} else {
+			address := make([]string, len(impl.BJ_NetSignConfig)+len(impl.SH_NetSignConfig), len(impl.BJ_NetSignConfig)+len(impl.SH_NetSignConfig))
+			for i, v := range impl.BJ_NetSignConfig {
+				address[i] = net.JoinHostPort(v.Ip, v.Port)
+			}
+			for i, v := range impl.SH_NetSignConfig {
+				address[len(impl.BJ_NetSignConfig)+i] = net.JoinHostPort(v.Ip, v.Port)
+			}
+
+			status := netsign.CheckAllNetsignStatus(address, len(impl.BJ_NetSignConfig)+len(impl.SH_NetSignConfig))
+
+			var result1, result2 int
+
+			for i, _ := range impl.BJ_NetSignConfig {
+				result1 += status[i]
+			}
+			for i, _ := range impl.SH_NetSignConfig {
+				result2 += status[i+len(impl.BJ_NetSignConfig)]
+			}
+			if result1 == len(impl.BJ_NetSignConfig) {
+				if len(impl.SH_NetSignConfig) > 0 && result2 < len(impl.SH_NetSignConfig) {
+					impl.BAK_NetSignConfig = impl.BJ_NetSignConfig
+					impl.BJ_NetSignConfig = impl.SH_NetSignConfig
+					impl.SH_NetSignConfig = impl.BAK_NetSignConfig
+					//cncc.NetSignStatus=true
+					impl.Sessions = make(chan *NetSignSesssion, SessionCacheSize)
+					Netsign := netsign.NetSign{}
+					// 初始化cncc.SessionCacheSize个会话句柄
+					for i := 0; i < SessionCacheSize; i++ {
+
+						for _, netSignConfig := range impl.BJ_NetSignConfig {
+
+							ip := netSignConfig.Ip
+							passwd := netSignConfig.Passwd
+
+							port, err := strconv.Atoi(netSignConfig.Port)
+							if err != nil {
+								panic("Get port error !")
+							}
+							socketFd, ret := Netsign.OpenNetSign(ip, passwd, port)
+							if ret != 0 {
+								//cncc.NetSignStatus=false
+								logger.Errorf("LOGGER-CONN-SIGNAGENT-FAIL: open netsign err: ip [%s], "+
+									"port [%d], passwd [%s]", ip, port, passwd)
+								continue
+							}
+							impl.Sessions <- &NetSignSesssion{netSignConfig, socketFd}
+							break
+						}
+					}
+				} else {
+					logger.Errorf("no netsign is avaliable")
+				}
+			}
+
+		}
+	}
 }
 
-//根据key生成选项opts生成一个key
+// Uploadcert 上传证书
+func (csp *Impl) Uploadcert(ski []byte, certBytes []byte) error {
+	replace1 := strings.Replace(string(certBytes), "-----BEGIN CERTIFICATE-----", "", -1)
+	replace2 := strings.Replace(replace1, "-----END CERTIFICATE-----", "", -1)
+	replace := strings.Replace(replace2, "\n", "", -1)
+	return csp.uploadCert(ski, []byte(replace))
+}
+
+// KeyGen 根据key生成选项opts生成一个key
 func (csp *Impl) KeyGen(opts bccsp.KeyGenOpts) (k bccsp.Key, err error) {
 	// Validate arguments
 	if opts == nil {
 		return nil, errors.New("Invalid Opts parameter. It must not be nil")
 	}
-	
+
 	// Parse algorithm
 	switch opts.(type) {
 	case *bccsp.GMSM2KeyGenOpts:
@@ -128,7 +305,7 @@ func (csp *Impl) KeyGen(opts bccsp.KeyGenOpts) (k bccsp.Key, err error) {
 			return nil, errors.Wrapf(err, "Failed generating sm2 key")
 		}
 		k = &gmsm2PrivateKey{ski, gmsm2PublicKey{ski, pub}}
-	
+
 	case *bccsp.GMSM4KeyGenOpts:
 		// todo
 		ski, pub, err := csp.generateSM2Key(opts.Ephemeral())
@@ -147,7 +324,7 @@ func (csp *Impl) KeyGen(opts bccsp.KeyGenOpts) (k bccsp.Key, err error) {
 			return nil, errors.Wrapf(err, "Failed storing key [%s]", opts.Algorithm())
 		}
 	}
-	
+
 	return k, nil
 }
 
@@ -157,17 +334,17 @@ func (csp *Impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
 	if raw == nil {
 		return nil, errors.New("Invalid raw. Cannot be nil")
 	}
-	
+
 	if opts == nil {
 		return nil, errors.New("Invalid Opts parameter. It must not be nil")
 	}
-	switch opts.(type){
+	switch opts.(type) {
 	case *bccsp.X509PublicKeyImportOpts:
 		sm2Cert, ok := raw.(*sm2.Certificate)
 		if !ok {
 			return nil, errors.New("Invalid raw material. Expected *x509.Certificate.")
 		}
-		
+
 		pk := sm2Cert.PublicKey
 		switch pk.(type) {
 		case sm2.PublicKey:
@@ -177,19 +354,19 @@ func (csp *Impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
 				return nil, errors.New("Parse interface []  to sm2 pk error")
 			}
 			der, err := sm2.MarshalSm2PublicKey(&sm2PublickKey)
-			
+
 			if err != nil {
 				return nil, errors.New("MarshalSm2PublicKey error")
 			}
-			
+
 			gmsm2SK, err := sm2.ParseSm2PublicKey(der)
 			if err != nil {
 				return nil, fmt.Errorf("Failed converting to GMSM2 public key [%s]", err)
 			}
-			
+
 			logger.Infof("SKI [%s]", string(sm2Cert.SubjectKeyId))
 			return &gmsm2PublicKey{sm2Cert.SubjectKeyId, gmsm2SK}, err
-		
+
 		case *sm2.PublicKey:
 			logger.Infof("bccsp CNCC_GM keyimport pk is *sm2.PublicKey")
 			sm2PublickKey, ok := pk.(*sm2.PublicKey)
@@ -231,18 +408,18 @@ func (csp *Impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
 		return nil, errors.New("Import Key Options not recognized")
 	}
 }
+
 //根据哈希选项opts哈希一个消息msg，如果opts为空，则使用默认选项
 func (csp *Impl) Hash(msg []byte, opts bccsp.HashOpts) (digest []byte, err error) {
 	// Validate arguments
 	if opts == nil {
 		return nil, errors.New("Invalid opts. It must not be nil.")
 	}
-	
+
 	hash := sm3.New()
 	hash.Write(msg)
 	return hash.Sum(nil), nil
 }
-
 
 // GetHash returns and instance of hash.Hash using options opts.
 // If opts is nil then the default hash function is returned.
@@ -271,13 +448,13 @@ func (csp *Impl) GetHash(opts bccsp.HashOpts) (h hash.Hash, err error) {
 
 //根据SKI返回与该接口实例有联系的key
 func (csp *Impl) GetKey(ski []byte) (k bccsp.Key, err error) {
-	
+
 	pub, isPriv, err := csp.getSM2Key(ski)
-	
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed getting key for SKI [%v]", ski)
 	}
-	
+
 	if isPriv {
 		logger.Info("Get sm2 PrivateKey in HSM")
 		return &gmsm2PrivateKey{ski, gmsm2PublicKey{ski, pub}}, nil
@@ -299,24 +476,24 @@ func (csp *Impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.Signer
 	if len(digest) == 0 {
 		return false, errors.New("Invalid digest. Cannot be empty.")
 	}
-	
+
 	//var sig SM2Signature
 	//_, err = asn1.Unmarshal(signature, &sig)
-	
+
 	switch k.(type) {
 	case *gmsm2PrivateKey:
-		
+
 		//puk := k.(*gmsm2PrivateKey).pubKey.pubKey
-		
+
 		//verify := sm2.Verify(puk, digest, sig.R, sig.S)
 		//logger.Infof("soft label [%s]\n", "SM2SignKey"+string(k.SKI()))
 		return csp.verifyP11SM2(k.SKI(), digest, signature)
 	case *gmsm2PublicKey:
 		//puk := k.(*gmsm2PublicKey).pubKey
-		
+
 		//verify := sm2.Verify(puk, digest, sig.R, sig.S)
 		//logger.Infof("soft label [%s]\n", "SM2SignKey"+string(k.SKI()))
-		return csp.verifyP11SM2(k.SKI(), digest,  signature)
+		return csp.verifyP11SM2(k.SKI(), digest, signature)
 	default:
 		return false, errors.New("Key type not recognized. Supported keys: [SM2 Key]")
 	}
@@ -332,7 +509,7 @@ func (csp *Impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
 	if len(digest) == 0 {
 		return nil, errors.New("Invalid digest. Cannot be empty.")
 	}
-	
+
 	// Parse algorithm
 	switch k.(type) {
 	case *gmsm2PrivateKey:
@@ -344,7 +521,7 @@ func (csp *Impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
 	default:
 		return nil, errors.New("Key type not recognized. Supported keys: [SM2 Private Key]")
 	}
-	
+
 	return
 }
 
@@ -362,7 +539,7 @@ func (csp *Impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts
 	//
 	//return encryptor.Encrypt(k, plaintext, opts)
 	// todo
-	return nil,nil
+	return nil, nil
 }
 
 //根据解密者选项opts，使用k对ciphertext进行解密
@@ -384,10 +561,11 @@ func (csp *Impl) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpt
 	//
 	//return
 	// todo
-	return nil,nil
+	return nil, nil
 }
+
 //根据解密者选项opts，使用k对ciphertext进行解密
-func (csp *Impl) KeyDeriv (k bccsp.Key, opts bccsp.KeyDerivOpts) (dk bccsp.Key, err error){
+func (csp *Impl) KeyDeriv(k bccsp.Key, opts bccsp.KeyDerivOpts) (dk bccsp.Key, err error) {
 	//// Validate arguments
 	//if k == nil {
 	//	return nil, errors.New("Invalid Key. It must not be nil.")
@@ -405,6 +583,5 @@ func (csp *Impl) KeyDeriv (k bccsp.Key, opts bccsp.KeyDerivOpts) (dk bccsp.Key, 
 	//
 	//return
 	// todo
-	return nil,nil
+	return nil, nil
 }
-
