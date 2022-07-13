@@ -23,15 +23,15 @@ package msp
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
+	"github.com/tjfoc/gmsm/x509"
 	"math/big"
 	"time"
 
-	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/utils"
+	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/gm"
 	"github.com/pkg/errors"
 )
 
@@ -85,7 +85,7 @@ func sanitizeECDSASignedCert(cert *x509.Certificate, parentCert *x509.Certificat
 		return nil, errors.New("parent certificate must be different from nil")
 	}
 
-	expectedSig, err := utils.SignatureToLowS(parentCert.PublicKey.(*ecdsa.PublicKey), cert.Signature)
+	expectedSig, err := gm.SignatureToLowS(parentCert.PublicKey.(*ecdsa.PublicKey), cert.Signature)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func sanitizeECDSASignedCert(cert *x509.Certificate, parentCert *x509.Certificat
 	//    the lower level interface that represent an x509 certificate
 	//    encoding
 	var newCert certificate
-	newCert, err = certFromX509Cert(cert)
+	newCert, err = certFromSM2Cert(cert)
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +127,14 @@ func certFromX509Cert(cert *x509.Certificate) (certificate, error) {
 	}
 	return newCert, nil
 }
+func certFromSM2Cert(cert *x509.Certificate) (certificate, error) {
+	var newCert certificate
+	_, err := asn1.Unmarshal(cert.Raw, &newCert)
+	if err != nil {
+		return certificate{}, errors.Wrap(err, "unmarshalling of the certificate failed")
+	}
+	return newCert, nil
+}
 
 // String returns a PEM representation of a certificate
 func (c certificate) String() string {
@@ -145,7 +153,7 @@ func (c certificate) String() string {
 // certToPEM converts the given x509.Certificate to a PEM
 // encoded string
 func certToPEM(certificate *x509.Certificate) string {
-	cert, err := certFromX509Cert(certificate)
+	cert, err := certFromSM2Cert(certificate)
 	if err != nil {
 		mspIdentityLogger.Warning("Failed converting certificate to asn1", err)
 		return ""

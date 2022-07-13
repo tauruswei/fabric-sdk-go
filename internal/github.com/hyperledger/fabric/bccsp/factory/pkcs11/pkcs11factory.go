@@ -3,10 +3,7 @@ Copyright IBM Corp. All Rights Reserved.
 
 SPDX-License-Identifier: Apache-2.0
 */
-/*
-Notice: This file has been modified for Hyperledger Fabric SDK Go usage.
-Please review third_party pinning scripts and patches for more details.
-*/
+
 package pkcs11
 
 import (
@@ -31,7 +28,6 @@ func (f *PKCS11Factory) Name() string {
 
 // Get returns an instance of BCCSP using Opts.
 func (f *PKCS11Factory) Get(p11Opts *pkcs11.PKCS11Opts) (bccsp.BCCSP, error) {
-	// Validate arguments
 	if p11Opts == nil {
 		return nil, errors.New("Invalid config. It must not be nil.")
 	}

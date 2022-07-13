@@ -16,7 +16,7 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/logging"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
-	"github.com/hyperledger/fabric-sdk-go/pkg/core/cryptosuite/bccsp/sw"
+	"github.com/hyperledger/fabric-sdk-go/pkg/core/cryptosuite/bccsp/gm"
 )
 
 var logger = logging.NewLogger("fabsdk/core")
@@ -45,7 +45,7 @@ func GetDefault() core.CryptoSuite {
 	logger.Info("No default cryptosuite found, using default SW implementation")
 
 	// Use SW as the default cryptosuite when not initialized properly - should be for testing only
-	s, err := sw.GetSuiteWithDefaultEphemeral()
+	s, err := gm.GetSuiteWithDefaultEphemeral()
 	if err != nil {
 		logger.Panicf("Could not initialize default cryptosuite: %s", err)
 	}

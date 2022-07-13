@@ -136,7 +136,7 @@ func FromPeerConfig(peerCfg *fab.NetworkPeer) Option {
 		p.certificate = peerCfg.TLSCACert
 		if peerCfg.GRPCOptions["allow-insecure"] == false {
 			//verify if certificate was expired or not yet valid
-			err = verifier.ValidateCertificateDates(p.certificate)
+			err = verifier.ValidateTlsCertificateDates(p.certificate)
 			if err != nil {
 				logger.Warn(err)
 			}

@@ -13,10 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-/*
-Notice: This file has been modified for Hyperledger Fabric SDK Go usage.
-Please review third_party pinning scripts and patches for more details.
-*/
 
 package sw
 
@@ -27,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
+	"github.com/tjfoc/gmsm/sm2"
 )
 
 type ecdsaKeyGenerator struct {
@@ -40,6 +37,29 @@ func (kg *ecdsaKeyGenerator) KeyGen(opts bccsp.KeyGenOpts) (bccsp.Key, error) {
 	}
 
 	return &ecdsaPrivateKey{privKey, true}, nil
+}
+
+type gmsm2KeyGenerator struct {
+}
+
+func (gm *gmsm2KeyGenerator) KeyGen(opts bccsp.KeyGenOpts) (bccsp.Key, error) {
+	privKey, err := sm2.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("Failed generating SM2 key for [%v]: [%s]", err)
+	}
+	return &gmsm2PrivateKey{privKey}, nil
+}
+
+type gmsm4KeyGenerator struct {
+	length int
+}
+
+func (gm *gmsm4KeyGenerator) KeyGen(opts bccsp.KeyGenOpts) (bccsp.Key, error) {
+	lowLevelKey, err := GetRandomBytes(int(gm.length))
+	if err != nil {
+		return nil, fmt.Errorf("Failed generating SM4 key for [%v]: [%s]", err)
+	}
+	return &gmsm4PrivateKey{lowLevelKey, false}, nil
 }
 
 type aesKeyGenerator struct {

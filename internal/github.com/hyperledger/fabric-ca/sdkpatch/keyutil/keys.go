@@ -16,6 +16,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	gmx509 "github.com/tjfoc/gmsm/x509"
 )
 
 func PrivateKeyToDER(privateKey *ecdsa.PrivateKey) ([]byte, error) {
@@ -43,6 +44,11 @@ func derToPrivateKey(der []byte) (key interface{}, err error) {
 
 	if key, err = x509.ParseECPrivateKey(der); err == nil {
 		return
+	}
+	if key, err := gmx509.ParsePKCS8UnecryptedPrivateKey(der); err == nil {
+		return key, nil
+	} else {
+		fmt.Printf("error!!!!! %s", err.Error())
 	}
 
 	return nil, errors.New("invalid key type. The DER must contain an ecdsa.PrivateKey")

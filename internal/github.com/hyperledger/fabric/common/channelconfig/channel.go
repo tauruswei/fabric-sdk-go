@@ -195,6 +195,8 @@ func (cc *ChannelConfig) validateHashingAlgorithm() error {
 		cc.hashingAlgorithm = util.ComputeSHA256
 	case bccsp.SHA3_256:
 		cc.hashingAlgorithm = util.ComputeSHA3256
+	case bccsp.GMSM3:
+		cc.hashingAlgorithm = util.ComputeGMSM3
 	default:
 		return fmt.Errorf("Unknown hashing algorithm type: %s", cc.protos.HashingAlgorithm.Name)
 	}

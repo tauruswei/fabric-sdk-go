@@ -136,7 +136,7 @@ func newDialOpts(config fab.EndpointConfig, url string, params *params) ([]grpc.
 		}
 		//verify if certificate was expired or not yet valid
 		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			return verifier.VerifyPeerCertificate(rawCerts, verifiedChains)
+			return verifier.VerifyTlsPeerCertificate(rawCerts, verifiedChains)
 		}
 
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))

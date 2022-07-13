@@ -10,8 +10,8 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/pem"
+	"github.com/tjfoc/gmsm/x509"
 	"io"
 
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/logging"

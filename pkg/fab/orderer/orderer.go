@@ -82,7 +82,7 @@ func New(config fab.EndpointConfig, opts ...Option) (*Orderer, error) {
 			return nil, err
 		}
 		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			return verifier.VerifyPeerCertificate(rawCerts, verifiedChains)
+			return verifier.VerifyTlsPeerCertificate(rawCerts, verifiedChains)
 		}
 
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
@@ -145,7 +145,7 @@ func FromOrdererConfig(ordererCfg *fab.OrdererConfig) Option {
 
 		if ordererCfg.GRPCOptions["allow-insecure"] == false {
 			//verify if certificate was expired or not yet valid
-			err := verifier.ValidateCertificateDates(o.tlsCACert)
+			err := verifier.ValidateTlsCertificateDates(o.tlsCACert)
 			if err != nil {
 				//log this error
 				logger.Warn(err)

@@ -20,6 +20,7 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	"github.com/pkg/errors"
+	gmx509 "github.com/tjfoc/gmsm/x509"
 )
 
 var logger = logging.NewLogger("fabsdk/fab")
@@ -89,7 +90,7 @@ func areCertDatesValid(serializedID []byte) error {
 	if bl == nil {
 		return errors.New("could not decode the PEM structure")
 	}
-	cert, err := x509.ParseCertificate(bl.Bytes)
+	cert, err := gmx509.ParseCertificate(bl.Bytes)
 	if err != nil {
 		return err
 	}
@@ -237,7 +238,7 @@ func addCertsToConfig(config fab.EndpointConfig, pemCertsList [][]byte) {
 			if err != nil {
 				continue
 			}
-			err = verifier.ValidateCertificateDates(cert)
+			err = verifier.ValidateTlsCertificateDates(cert)
 			if err != nil {
 				logger.Warn("%v", err)
 				continue
