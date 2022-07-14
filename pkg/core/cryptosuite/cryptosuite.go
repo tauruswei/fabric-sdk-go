@@ -78,6 +78,11 @@ func GetSHA256Opts() core.HashOpts {
 	return &bccsp.SHA256Opts{}
 }
 
+//GetSHA256Opts returns options relating to SHA-256.
+func GetGMSM3Opts() core.HashOpts {
+	return &bccsp.GMSM3Opts{}
+}
+
 //GetSHAOpts returns options for computing SHA.
 func GetSHAOpts() core.HashOpts {
 	return &bccsp.SHAOpts{}
