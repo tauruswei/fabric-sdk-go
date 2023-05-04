@@ -93,10 +93,6 @@ func (msp *bccspmsp) validateIdentityAgainstChain(id *identity, validationChain 
 	return msp.validateCertAgainstChain(id.cert, validationChain)
 }
 
-func (msp *bccspmsp) validateTlsIdentityAgainstChain(id *identity, validationChain []*gmx509.Certificate) error {
-	return msp.validateCertAgainstChain(id.cert, validationChain)
-}
-
 func (msp *bccspmsp) validateCertAgainstChain(cert *gmx509.Certificate, validationChain []*gmx509.Certificate) error {
 	// here we know that the identity is valid; now we have to check whether it has been revoked
 
